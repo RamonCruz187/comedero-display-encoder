@@ -1,0 +1,31 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// Pines I2C personalizados
+#define SDA_PIN 13
+#define SCL_PIN 14
+
+// Pines del encoder KY-040
+#define ENCODER_CLK 16
+#define ENCODER_DT  15
+#define ENCODER_SW  3
+
+// Tamaño de pantalla
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+// Definición de pantallas
+#define MAIN_SCREEN 0
+#define HORARIOS_SCREEN 1
+#define SELECCIONAR_HORARIO_SCREEN 5
+#define CONFIG_HORARIO_SCREEN 6
+#define CONFIG_SCREEN 3
+#define SUCCESS_SCREEN 4
+
+// Estados de edición
+#define EDIT_NONE 0
+#define EDIT_HORA 1
+#define EDIT_MINUTO 2
+#define EDIT_PORCION 3
+
+#endif
