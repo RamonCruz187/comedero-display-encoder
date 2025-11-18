@@ -8,8 +8,14 @@ extern int tempHora;
 extern int tempMinuto;
 extern int tempPorcion;
 extern int editMode;
+extern bool dispensandoActivo;
 
 void handleEncoderChanges() {
+  // Bloquear encoder durante dispensado
+  if (dispensandoActivo) {
+    return;
+  }
+  
   static int lastEncoderPos = 0;
   
   if (encoderPos != lastEncoderPos) {

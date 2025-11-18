@@ -24,6 +24,16 @@ extern int editMode;
 extern unsigned long lastBlinkTime;
 extern bool blinkState;
 
+// Variables para control de dispensado
+unsigned long dispensandoStartTime = 0;
+bool dispensandoActivo = false;
+int porcionActual = 0;
+bool dispensadoAutomatico = false;
+
+// Variables para control de horarios automáticos
+int ultimoHorarioActivado = -1;
+int ultimoMinutoActivado = -1;
+
 // Declaraciones de funciones
 void updateEncoder();
 void handleButtonPress();
@@ -31,11 +41,19 @@ void updateDisplay();
 void guardarHorarioEnPreferences();
 void cargarHorarioDesdePreferences();
 void handleEncoderChanges();
+void iniciarDispensado();
+void iniciarDispensadoAutomatico(int porcion);
+void actualizarDispensado();
+void revisarHorariosAutomaticos();
 
 void setup() {
   Serial.begin(115200);
   
   Wire.begin(SDA_PIN, SCL_PIN);
+
+  // Configurar pin del motor
+  pinMode(MOTOR_PIN, OUTPUT);
+  digitalWrite(MOTOR_PIN, LOW);
 
   if (!display.begin(0x3C, true)) {
     Serial.println("No se encontró SH1106");
@@ -72,19 +90,23 @@ void loop() {
   bool currentButtonState = digitalRead(ENCODER_SW);
   static unsigned long lastButtonTime = 0;
   
-  if (currentButtonState == LOW && lastButtonState == HIGH) {
-    if (millis() - lastButtonTime > 300) {
-      buttonPressed = true;
-      lastButtonTime = millis();
+  // Solo procesar botón si no está dispensando
+  if (!dispensandoActivo) {
+    if (currentButtonState == LOW && lastButtonState == HIGH) {
+      if (millis() - lastButtonTime > 300) {
+        buttonPressed = true;
+        lastButtonTime = millis();
+      }
     }
   }
   lastButtonState = currentButtonState;
 
+  // Solo procesar encoder si no está dispensando
   static int lastEncoderPos = 0;
   static int accumulatedChange = 0;
   static unsigned long lastChangeTime = 0;
   
-  if (encoderPos != lastEncoderPos && editMode == EDIT_NONE) {
+  if (!dispensandoActivo && encoderPos != lastEncoderPos && editMode == EDIT_NONE) {
     int totalChange = encoderPos - lastEncoderPos;
     accumulatedChange += totalChange;
     
@@ -129,9 +151,18 @@ void loop() {
     lastEncoderPos = encoderPos;
   }
 
-  if (buttonPressed) {
+  // Solo procesar botón si no está dispensando
+  if (buttonPressed && !dispensandoActivo) {
     handleButtonPress();
     buttonPressed = false;
+  }
+
+  // Revisar horarios automáticos (siempre, incluso durante dispensado)
+  revisarHorariosAutomaticos();
+
+  // Control del dispensado
+  if (dispensandoActivo) {
+    actualizarDispensado();
   }
 
   handleEncoderChanges();
@@ -139,13 +170,40 @@ void loop() {
   delay(50);
 }
 
+void revisarHorariosAutomaticos() {
+  DateTime now = rtc.now();
+  int horaActual = now.hour();
+  int minutoActual = now.minute();
+
+  // Solo revisar si no estamos ya dispensando
+  if (!dispensandoActivo) {
+    for (int i = 1; i <= 4; i++) {
+      bool habilitado;
+      int hora, minuto, porcion;
+      
+      if (obtenerHorario(i, habilitado, hora, minuto, porcion)) {
+        if (habilitado && hora == horaActual && minuto == minutoActual) {
+          // Evitar múltiples activaciones en el mismo minuto
+          if (ultimoHorarioActivado != i || ultimoMinutoActivado != minutoActual) {
+            Serial.println("Horario automático activado: H" + String(i));
+            iniciarDispensadoAutomatico(porcion);
+            ultimoHorarioActivado = i;
+            ultimoMinutoActivado = minutoActual;
+            break; // Solo un horario a la vez
+          }
+        }
+      }
+    }
+  }
+}
+
 void handleButtonPress() {
   switch (currentScreen) {
     case MAIN_SCREEN:
       if (selectedOption >= 0 && selectedOption <= 3) {
         switch (selectedOption) {
-          case 0:
-            currentScreen = SUCCESS_SCREEN;
+          case 0: // DISPENSAR AHORA
+            iniciarDispensado();
             break;
           case 1:
             currentScreen = HORARIOS_SCREEN;
@@ -238,14 +296,71 @@ void handleButtonPress() {
       break;
 
     case SUCCESS_SCREEN:
+      // Después de mostrar "comida dispensada", volver al menú principal
       currentScreen = MAIN_SCREEN;
       selectedOption = -1;
       encoderPos = -1;
+      dispensandoActivo = false;
+      dispensadoAutomatico = false;
       break;
   }
 }
 
+void iniciarDispensado() {
+  dispensandoActivo = true;
+  dispensandoStartTime = millis();
+  porcionActual = 6; // Porción fija para dispensado manual (3 segundos)
+  dispensadoAutomatico = false;
+  currentScreen = DISPENSANDO_SCREEN;
+  
+  // Activar el motor
+  digitalWrite(MOTOR_PIN, HIGH);
+  Serial.println("Dispensado manual iniciado - Motor ACTIVADO");
+}
+
+void iniciarDispensadoAutomatico(int porcion) {
+  dispensandoActivo = true;
+  dispensandoStartTime = millis();
+  porcionActual = porcion;
+  dispensadoAutomatico = true;
+  currentScreen = DISPENSANDO_SCREEN;
+  
+  // Activar el motor
+  digitalWrite(MOTOR_PIN, HIGH);
+  Serial.println("Dispensado automático iniciado - Motor ACTIVADO");
+  Serial.println("Porción: " + String(porcion) + " -> Tiempo: " + String(porcion * 500) + " ms");
+}
+
+void actualizarDispensado() {
+  unsigned long tiempoActual = millis();
+  unsigned long tiempoTranscurrido = tiempoActual - dispensandoStartTime;
+  unsigned long tiempoDispensado = porcionActual * 500; // porcion/2 segundos (en milisegundos)
+
+  if (tiempoTranscurrido >= tiempoDispensado && currentScreen == DISPENSANDO_SCREEN) {
+    // Terminar dispensado
+    digitalWrite(MOTOR_PIN, LOW);
+    Serial.println("Dispensado completado - Motor DESACTIVADO");
+    
+    // Cambiar a pantalla de éxito
+    currentScreen = SUCCESS_SCREEN;
+    dispensandoStartTime = tiempoActual; // Reiniciar contador para pantalla de éxito
+  }
+  else if (tiempoTranscurrido >= 3000 && currentScreen == SUCCESS_SCREEN) {
+    // Después de 3 segundos en pantalla de éxito, volver al menú principal
+    currentScreen = MAIN_SCREEN;
+    selectedOption = -1;
+    encoderPos = -1;
+    dispensandoActivo = false;
+    dispensadoAutomatico = false;
+  }
+}
+
 void IRAM_ATTR updateEncoder() {
+  // Bloquear encoder durante dispensado
+  if (dispensandoActivo) {
+    return;
+  }
+  
   int clkValue = digitalRead(ENCODER_CLK);
   int dtValue = digitalRead(ENCODER_DT);
   

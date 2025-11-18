@@ -10,6 +10,9 @@
 #define ENCODER_DT  15
 #define ENCODER_SW  3
 
+// Pin del motor
+#define MOTOR_PIN 2
+
 // Tamaño de pantalla
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -21,11 +24,16 @@
 #define CONFIG_HORARIO_SCREEN 6
 #define CONFIG_SCREEN 3
 #define SUCCESS_SCREEN 4
+#define DISPENSANDO_SCREEN 7
 
 // Estados de edición
 #define EDIT_NONE 0
 #define EDIT_HORA 1
 #define EDIT_MINUTO 2
 #define EDIT_PORCION 3
+
+// Declaraciones de funciones para preferences_manager
+bool obtenerHorario(int numeroHorario, bool &habilitado, int &hora, int &minuto, int &porcion);
+void guardarHorario(int numeroHorario, bool habilitado, int hora, int minuto, int porcion);
 
 #endif

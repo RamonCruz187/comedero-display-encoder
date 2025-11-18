@@ -2,13 +2,11 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 #include <RTClib.h>
-#include <Preferences.h>
 #include "config.h"
 
 // Definición de variables globales
 Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 RTC_DS1307 rtc;
-Preferences prefs;
 
 // Variables de control
 int currentScreen = MAIN_SCREEN;
@@ -34,6 +32,11 @@ int editMode = EDIT_NONE;
 unsigned long lastBlinkTime = 0;
 bool blinkState = false;
 
+// Variables externas para dispensado
+extern bool dispensandoActivo;
+extern bool dispensadoAutomatico;
+extern int porcionActual;
+
 void updateDisplay() {
   display.clearDisplay();
   display.setTextSize(1);
@@ -58,11 +61,39 @@ void updateDisplay() {
     case SUCCESS_SCREEN:
       showSuccessScreen();
       break;
+    case DISPENSANDO_SCREEN:
+      showDispensandoScreen();
+      break;
   }
 
   display.display();
 }
 
+// Función para pantalla de dispensado
+void showDispensandoScreen() {
+  display.setCursor(0, 25);
+  display.setTextSize(2);
+  display.println("SIRVIENDO");
+  display.setTextSize(1);
+  display.setCursor(0, 45);
+  
+  if (dispensadoAutomatico) {
+    display.println("Horario Programado");
+  } else {
+    display.println("Dispensado manual");
+  }
+}
+
+// Función para pantalla de éxito
+void showSuccessScreen() {
+  display.setCursor(0, 20);
+  display.setTextSize(2);
+  display.println("COMIDA");
+  display.setCursor(0, 40);
+  display.println("DISPENSADA");
+}
+
+// Función modificada para usar el manager
 String obtenerProximaComida() {
   DateTime now = rtc.now();
   int horaActual = now.hour();
@@ -72,35 +103,32 @@ String obtenerProximaComida() {
   String proximaComida = "--:--";
   int menorDiferencia = 24 * 60; // Inicializar con un valor grande (24 horas en minutos)
   
-  prefs.begin("comedor", true);
-  
   for (int i = 1; i <= 4; i++) {
-    String base = "h" + String(i) + "_";
-    bool habilitado = prefs.getBool((base + "hab").c_str(), false);
-    int hora = prefs.getInt((base + "hora").c_str(), -1);
-    int minuto = prefs.getInt((base + "minuto").c_str(), -1);
+    bool habilitado;
+    int hora, minuto, porcion;
     
-    if (habilitado && hora != -1 && minuto != -1) {
-      int tiempoHorario = hora * 60 + minuto;
-      int diferencia;
-      
-      if (tiempoHorario >= tiempoActual) {
-        // El horario es hoy
-        diferencia = tiempoHorario - tiempoActual;
-      } else {
-        // El horario es mañana
-        diferencia = (24 * 60 - tiempoActual) + tiempoHorario;
-      }
-      
-      // Si encontramos un horario más cercano
-      if (diferencia < menorDiferencia && diferencia > 0) {
-        menorDiferencia = diferencia;
-        proximaComida = (hora < 10 ? "0" : "") + String(hora) + ":" + (minuto < 10 ? "0" : "") + String(minuto);
+    if (obtenerHorario(i, habilitado, hora, minuto, porcion)) {
+      if (habilitado) {
+        int tiempoHorario = hora * 60 + minuto;
+        int diferencia;
+        
+        if (tiempoHorario >= tiempoActual) {
+          // El horario es hoy
+          diferencia = tiempoHorario - tiempoActual;
+        } else {
+          // El horario es mañana
+          diferencia = (24 * 60 - tiempoActual) + tiempoHorario;
+        }
+        
+        // Si encontramos un horario más cercano
+        if (diferencia < menorDiferencia && diferencia > 0) {
+          menorDiferencia = diferencia;
+          proximaComida = (hora < 10 ? "0" : "") + String(hora) + ":" + (minuto < 10 ? "0" : "") + String(minuto);
+        }
       }
     }
   }
   
-  prefs.end();
   return proximaComida;
 }
 
@@ -165,31 +193,19 @@ void showHorariosScreen() {
 
   String options[5];
   
-  bool prefsOk = prefs.begin("comedor", true);
-  
-  if (!prefsOk) {
-    for (int i = 0; i < 4; i++) {
-      options[i] = "H" + String(i+1) + ": --:-- NO P-";
+  for (int i = 1; i <= 4; i++) {
+    bool habilitado;
+    int hora, minuto, porcion;
+    
+    if (obtenerHorario(i, habilitado, hora, minuto, porcion)) {
+      String horaStr = (hora < 10 ? "0" : "") + String(hora);
+      String minutoStr = (minuto < 10 ? "0" : "") + String(minuto);
+      
+      String estado = habilitado ? "SI" : "NO";
+      options[i-1] = "H" + String(i) + ": " + horaStr + ":" + minutoStr + " " + estado + " P" + String(porcion);
+    } else {
+      options[i-1] = "H" + String(i) + ": --:-- NO P-";
     }
-  } else {
-    for (int i = 1; i <= 4; i++) {
-      String base = "h" + String(i) + "_";
-      bool habilitado = prefs.getBool((base + "hab").c_str(), false);
-      int hora = prefs.getInt((base + "hora").c_str(), -1);
-      int minuto = prefs.getInt((base + "minuto").c_str(), -1);
-      int porcion = prefs.getInt((base + "porcion").c_str(), -1);
-
-      if (hora != -1 && minuto != -1 && porcion != -1) {
-        String horaStr = (hora < 10 ? "0" : "") + String(hora);
-        String minutoStr = (minuto < 10 ? "0" : "") + String(minuto);
-        
-        String estado = habilitado ? "SI" : "NO";
-        options[i-1] = "H" + String(i) + ": " + horaStr + ":" + minutoStr + " " + estado + " P" + String(porcion);
-      } else {
-        options[i-1] = "H" + String(i) + ": --:-- NO P-";
-      }
-    }
-    prefs.end();
   }
   
   options[4] = "ATRAS";
@@ -346,40 +362,18 @@ void showConfigScreen() {
   }
 }
 
-void showSuccessScreen() {
-  display.setCursor(0, 20);
-  display.setTextSize(2);
-  display.println("COMIDA");
-  display.setCursor(0, 40);
-  display.println("DISPENSADA");
-}
-
 void cargarHorarioDesdePreferences() {
-  prefs.begin("comedor", true);
+  bool habilitado;
+  int hora, minuto, porcion;
   
-  String base = "h" + String(horarioSeleccionado) + "_";
-  tempHabilitado = prefs.getBool((base + "hab").c_str(), false);
-  tempHora = prefs.getInt((base + "hora").c_str(), 8);
-  tempMinuto = prefs.getInt((base + "minuto").c_str(), 0);
-  tempPorcion = prefs.getInt((base + "porcion").c_str(), 5);
-  
-  prefs.end();
+  if (obtenerHorario(horarioSeleccionado, habilitado, hora, minuto, porcion)) {
+    tempHabilitado = habilitado;
+    tempHora = hora;
+    tempMinuto = minuto;
+    tempPorcion = porcion;
+  }
 }
 
 void guardarHorarioEnPreferences() {
-  prefs.begin("comedor", false);
-  
-  String base = "h" + String(horarioSeleccionado) + "_";
-  prefs.putBool((base + "hab").c_str(), tempHabilitado);
-  prefs.putInt((base + "hora").c_str(), tempHora);
-  prefs.putInt((base + "minuto").c_str(), tempMinuto);
-  prefs.putInt((base + "porcion").c_str(), tempPorcion);
-  
-  prefs.end();
-  
-  Serial.println("Horario " + String(horarioSeleccionado) + " guardado:");
-  Serial.println("Habilitado: " + String(tempHabilitado ? "SI" : "NO"));
-  Serial.println("Hora: " + String(tempHora));
-  Serial.println("Minuto: " + String(tempMinuto));
-  Serial.println("Porcion: " + String(tempPorcion));
+  guardarHorario(horarioSeleccionado, tempHabilitado, tempHora, tempMinuto, tempPorcion);
 }
