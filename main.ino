@@ -34,6 +34,15 @@ bool dispensadoAutomatico = false;
 int ultimoHorarioActivado = -1;
 int ultimoMinutoActivado = -1;
 
+// Variables para configuración de fecha/hora
+int tempAnio = 2024;
+int tempMes = 1;
+int tempDia = 1;
+int tempHoraRTC = 0;
+int tempMinutoRTC = 0;
+int editModeRTC = EDIT_NONE;
+bool seleccionGuardar = true;  // true = GUARDAR, false = SALIR
+
 // Declaraciones de funciones
 void updateEncoder();
 void handleButtonPress();
@@ -45,6 +54,8 @@ void iniciarDispensado();
 void iniciarDispensadoAutomatico(int porcion);
 void actualizarDispensado();
 void revisarHorariosAutomaticos();
+void cargarFechaHoraActual();
+void guardarFechaHoraRTC();
 
 void setup() {
   Serial.begin(115200);
@@ -106,7 +117,7 @@ void loop() {
   static int accumulatedChange = 0;
   static unsigned long lastChangeTime = 0;
   
-  if (!dispensandoActivo && encoderPos != lastEncoderPos && editMode == EDIT_NONE) {
+  if (!dispensandoActivo && encoderPos != lastEncoderPos && editMode == EDIT_NONE && editModeRTC == EDIT_NONE) {
     int totalChange = encoderPos - lastEncoderPos;
     accumulatedChange += totalChange;
     
@@ -132,6 +143,9 @@ void loop() {
           break;
         case CONFIG_SCREEN:
           selectedOption = constrain(selectedOption + changeToApply, 0, 2);
+          break;
+        case CONFIG_FECHA_HORA_SCREEN:
+          selectedOption = constrain(selectedOption + changeToApply, 0, 5);
           break;
       }
       
@@ -288,10 +302,79 @@ void handleButtonPress() {
       break;
 
     case CONFIG_SCREEN:
-      if (selectedOption == 2) {
-        currentScreen = MAIN_SCREEN;
-        selectedOption = -1;
-        encoderPos = -1;
+      switch (selectedOption) {
+        case 0: // CONF. FECHA/HORA
+          cargarFechaHoraActual();
+          currentScreen = CONFIG_FECHA_HORA_SCREEN;
+          selectedOption = 0;
+          encoderPos = 0;
+          editModeRTC = EDIT_NONE;
+          seleccionGuardar = true; // Por defecto seleccionar GUARDAR
+          break;
+        case 1: // VER PLATO
+          // Aquí iría la funcionalidad de ver plato (para futuro)
+          break;
+        case 2: // ATRAS
+          currentScreen = MAIN_SCREEN;
+          selectedOption = -1;
+          encoderPos = -1;
+          break;
+      }
+      break;
+
+    case CONFIG_FECHA_HORA_SCREEN:
+      switch (selectedOption) {
+        case 0: // AÑO
+          if (editModeRTC == EDIT_NONE) {
+            editModeRTC = EDIT_ANIO;
+          } else if (editModeRTC == EDIT_ANIO) {
+            editModeRTC = EDIT_NONE;
+          }
+          break;
+        case 1: // MES
+          if (editModeRTC == EDIT_NONE) {
+            editModeRTC = EDIT_MES;
+          } else if (editModeRTC == EDIT_MES) {
+            editModeRTC = EDIT_NONE;
+          }
+          break;
+        case 2: // DIA
+          if (editModeRTC == EDIT_NONE) {
+            editModeRTC = EDIT_DIA;
+          } else if (editModeRTC == EDIT_DIA) {
+            editModeRTC = EDIT_NONE;
+          }
+          break;
+        case 3: // HORA
+          if (editModeRTC == EDIT_NONE) {
+            editModeRTC = EDIT_HORA_RTC;
+          } else if (editModeRTC == EDIT_HORA_RTC) {
+            editModeRTC = EDIT_NONE;
+          }
+          break;
+        case 4: // MINUTO
+          if (editModeRTC == EDIT_NONE) {
+            editModeRTC = EDIT_MINUTO_RTC;
+          } else if (editModeRTC == EDIT_MINUTO_RTC) {
+            editModeRTC = EDIT_NONE;
+          }
+          break;
+        case 5: // GUARDAR | SALIR
+          if (editModeRTC == EDIT_NONE) {
+            // Entrar en modo selección GUARDAR/SALIR
+            editModeRTC = EDIT_GUARDAR_SALIR;
+          } else if (editModeRTC == EDIT_GUARDAR_SALIR) {
+            // Ejecutar la acción seleccionada
+            if (seleccionGuardar) {
+              guardarFechaHoraRTC();
+            }
+            // Salir en ambos casos
+            currentScreen = CONFIG_SCREEN;
+            selectedOption = 0;
+            encoderPos = 0;
+            editModeRTC = EDIT_NONE;
+          }
+          break;
       }
       break;
 
@@ -353,6 +436,22 @@ void actualizarDispensado() {
     dispensandoActivo = false;
     dispensadoAutomatico = false;
   }
+}
+
+void cargarFechaHoraActual() {
+  DateTime now = rtc.now();
+  tempAnio = now.year();
+  tempMes = now.month();
+  tempDia = now.day();
+  tempHoraRTC = now.hour();
+  tempMinutoRTC = now.minute();
+}
+
+void guardarFechaHoraRTC() {
+  rtc.adjust(DateTime(tempAnio, tempMes, tempDia, tempHoraRTC, tempMinutoRTC, 0));
+  Serial.println("Fecha y hora actualizadas en RTC:");
+  Serial.println(String(tempDia) + "/" + String(tempMes) + "/" + String(tempAnio) + " " + 
+                 String(tempHoraRTC) + ":" + String(tempMinutoRTC));
 }
 
 void IRAM_ATTR updateEncoder() {

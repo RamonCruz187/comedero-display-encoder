@@ -25,12 +25,19 @@
 #define CONFIG_SCREEN 3
 #define SUCCESS_SCREEN 4
 #define DISPENSANDO_SCREEN 7
+#define CONFIG_FECHA_HORA_SCREEN 8
 
 // Estados de edición
 #define EDIT_NONE 0
 #define EDIT_HORA 1
 #define EDIT_MINUTO 2
 #define EDIT_PORCION 3
+#define EDIT_ANIO 4
+#define EDIT_MES 5
+#define EDIT_DIA 6
+#define EDIT_HORA_RTC 7
+#define EDIT_MINUTO_RTC 8
+#define EDIT_GUARDAR_SALIR 9  // Nuevo estado para seleccionar GUARDAR o SALIR
 
 // Declaraciones de funciones para preferences_manager
 bool obtenerHorario(int numeroHorario, bool &habilitado, int &hora, int &minuto, int &porcion);

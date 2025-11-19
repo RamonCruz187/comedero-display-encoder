@@ -37,6 +37,15 @@ extern bool dispensandoActivo;
 extern bool dispensadoAutomatico;
 extern int porcionActual;
 
+// Variables externas para configuración de fecha/hora
+extern int tempAnio;
+extern int tempMes;
+extern int tempDia;
+extern int tempHoraRTC;
+extern int tempMinutoRTC;
+extern int editModeRTC;
+extern bool seleccionGuardar; // true = GUARDAR, false = SALIR
+
 void updateDisplay() {
   display.clearDisplay();
   display.setTextSize(1);
@@ -63,6 +72,9 @@ void updateDisplay() {
       break;
     case DISPENSANDO_SCREEN:
       showDispensandoScreen();
+      break;
+    case CONFIG_FECHA_HORA_SCREEN:  // Nueva pantalla
+      showConfigFechaHoraScreen();
       break;
   }
 
@@ -93,7 +105,151 @@ void showSuccessScreen() {
   display.println("DISPENSADA");
 }
 
-// Función modificada para usar el manager
+// Nueva función para pantalla de configuración de fecha/hora (CORREGIDA)
+void showConfigFechaHoraScreen() {
+  display.setCursor(0, 0);
+  display.println("CONFIG. FECHA/HORA");
+
+  // Actualizar el efecto de titileo
+  if (millis() - lastBlinkTime > 300) {
+    blinkState = !blinkState;
+    lastBlinkTime = millis();
+  }
+
+  // Definir las posiciones de los valores (CORREGIDAS)
+  int valorAnioX = 40;
+  int valorMesX = 35;
+  int valorDiaX = 35;
+  int valorHoraX = 40;
+  int valorMinutoX = 35;  // Corregido - mismo que los demás
+
+  // Opciones (CORREGIDAS - un solo espacio después de los dos puntos)
+  String labels[6];
+  labels[0] = "ANIO: ";
+  labels[1] = "MES: ";
+  labels[2] = "DIA: ";
+  labels[3] = "HORA: ";
+  labels[4] = "MIN: ";  // Corregido - mismo formato
+  labels[5] = "GUARDAR | SALIR";
+
+  for (int i = 0; i < 6; i++) {
+    int y = 10 + i * 9;
+    
+    bool isSelected = (i == selectedOption);
+    bool isEditing = false;
+    
+    if (editModeRTC != EDIT_NONE) {
+      if (i == 0 && editModeRTC == EDIT_ANIO) isEditing = true;
+      if (i == 1 && editModeRTC == EDIT_MES) isEditing = true;
+      if (i == 2 && editModeRTC == EDIT_DIA) isEditing = true;
+      if (i == 3 && editModeRTC == EDIT_HORA_RTC) isEditing = true;
+      if (i == 4 && editModeRTC == EDIT_MINUTO_RTC) isEditing = true;
+      if (i == 5 && editModeRTC == EDIT_GUARDAR_SALIR) isEditing = true;
+    }
+
+    // Dibujar fondo de selección (solo si no está en modo edición)
+    if (isSelected && !isEditing) {
+      display.fillRect(0, y, 128, 8, SH110X_WHITE);
+      display.setTextColor(SH110X_BLACK);
+    } else {
+      display.setTextColor(SH110X_WHITE);
+    }
+    
+    // Dibujar la etiqueta
+    display.setCursor(2, y + 1);
+    
+    // Caso especial para GUARDAR | SALIR
+    if (i == 5 && editModeRTC == EDIT_GUARDAR_SALIR) {
+      // Mostrar GUARDAR parpadeante o SALIR parpadeante según selección
+      if (blinkState) {
+        if (seleccionGuardar) {
+          display.print("GUARDAR | SALIR");
+        } else {
+          display.print("GUARDAR | SALIR");
+        }
+      } else {
+        if (seleccionGuardar) {
+          display.print("[GUARDAR] | SALIR");
+        } else {
+          display.print("GUARDAR | [SALIR]");
+        }
+      }
+    } else {
+      display.print(labels[i]);
+    }
+    
+    // Dibujar los valores con titileo si están en edición
+    switch (i) {
+      case 0: // AÑO
+        if (isEditing) {
+          if (blinkState) {
+            display.fillRect(valorAnioX, y, 25, 8, SH110X_WHITE);
+            display.setTextColor(SH110X_BLACK);
+          }
+        }
+        display.setCursor(valorAnioX, y + 1);
+        display.print(tempAnio);
+        break;
+        
+      case 1: // MES
+        if (isEditing) {
+          if (blinkState) {
+            display.fillRect(valorMesX, y, 15, 8, SH110X_WHITE);
+            display.setTextColor(SH110X_BLACK);
+          }
+        }
+        display.setCursor(valorMesX, y + 1);
+        display.print(tempMes < 10 ? "0" : "");
+        display.print(tempMes);
+        break;
+        
+      case 2: // DIA
+        if (isEditing) {
+          if (blinkState) {
+            display.fillRect(valorDiaX, y, 15, 8, SH110X_WHITE);
+            display.setTextColor(SH110X_BLACK);
+          }
+        }
+        display.setCursor(valorDiaX, y + 1);
+        display.print(tempDia < 10 ? "0" : "");
+        display.print(tempDia);
+        break;
+        
+      case 3: // HORA
+        if (isEditing) {
+          if (blinkState) {
+            display.fillRect(valorHoraX, y, 15, 8, SH110X_WHITE);
+            display.setTextColor(SH110X_BLACK);
+          }
+        }
+        display.setCursor(valorHoraX, y + 1);
+        display.print(tempHoraRTC < 10 ? "0" : "");
+        display.print(tempHoraRTC);
+        break;
+        
+      case 4: // MINUTO
+        if (isEditing) {
+          if (blinkState) {
+            display.fillRect(valorMinutoX, y, 15, 8, SH110X_WHITE);
+            display.setTextColor(SH110X_BLACK);
+          }
+        }
+        display.setCursor(valorMinutoX, y + 1);
+        display.print(tempMinutoRTC < 10 ? "0" : "");
+        display.print(tempMinutoRTC);
+        break;
+    }
+    
+    // Restaurar color para la siguiente iteración
+    if (isSelected && !isEditing) {
+      display.setTextColor(SH110X_BLACK);
+    } else {
+      display.setTextColor(SH110X_WHITE);
+    }
+  }
+}
+
+// El resto de las funciones se mantienen igual...
 String obtenerProximaComida() {
   DateTime now = rtc.now();
   int horaActual = now.hour();
